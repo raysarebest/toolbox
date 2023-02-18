@@ -43,7 +43,13 @@ struct New: AnyCommand {
         _ = try Process.git.clone(repo: gitUrl, toFolder: templateTree, branch: gitBranch)
 
         if FileManager.default.fileExists(atPath: templateTree.appendingPathComponents("manifest.yml")) {
-            try FileManager.default.createDirectory(atPath: workTree, withIntermediateDirectories: false, attributes: nil)
+            
+            do {
+                try FileManager.default.createDirectory(atPath: workTree, withIntermediateDirectories: false, attributes: nil)
+            } catch let error as NSError where signature.outputDirectory != nil && error.domain == NSCocoaErrorDomain && error.code == NSFileWriteFileExistsError {
+                // This is fine if the output directory already exists at a user-specified path
+            }
+
             let yaml = try String(contentsOf: templateTree.appendingPathComponents("manifest.yml").asFileURL, encoding: .utf8)
             let manifest = try YAMLDecoder().decode(TemplateManifest.self, from: yaml)
             let scaffolder = TemplateScaffolder(console: context.console, manifest: manifest)
@@ -67,7 +73,7 @@ struct New: AnyCommand {
             let gitDir = workTree.appendingPathComponents(".git")
             
             context.console.info("Creating git repository")
-            if FileManager.default.fileExists(atPath: gitDir) {
+            if FileManager.default.fileExists(atPath: gitDir) && signature.outputDirectory == nil {
                 try FileManager.default.removeItem(atPath: gitDir)
             }
             _ = try Process.git.create(gitDir: gitDir)
