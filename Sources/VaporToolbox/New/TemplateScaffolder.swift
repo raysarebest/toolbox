@@ -12,7 +12,7 @@ struct TemplateScaffolder {
         self.manifest = manifest
     }
 
-    func scaffold(name: String, from source: String, to destination: String, using input: inout CommandInput) throws {
+    func scaffold(name: String, from source: String, to destination: String, using input: inout CommandInput, fileManager: FileManager) throws {
         assert(source.hasPrefix("/"))
         assert(destination.hasPrefix("/"))
         var context: [String: MustacheData] = [:]
@@ -24,7 +24,7 @@ struct TemplateScaffolder {
         }
         self.console.info("Generating project files")
         for file in self.manifest.files {
-            try self.scaffold(file: file, from: source.trailingSlash, to: destination.trailingSlash, context: context)
+            try self.scaffold(file: file, from: source.trailingSlash, to: destination.trailingSlash, context: context, fileManager: fileManager)
         }
     }
 
@@ -111,7 +111,8 @@ struct TemplateScaffolder {
         file: TemplateManifest.File,
         from source: String,
         to destination: String,
-        context: [String: MustacheData]
+        context: [String: MustacheData],
+        fileManager: FileManager = .default
     ) throws {
         assert(source.hasSuffix("/"))
         assert(destination.hasSuffix("/"))
@@ -138,24 +139,57 @@ struct TemplateScaffolder {
         switch file.type {
         case .file(let dynamic):
             self.console.output("+ " + file.name.consoleText())
+
+            let sourceFilePath: String
+
             if dynamic {
                 let template = try String(contentsOf: source.appendingPathComponents(file.name).asFileURL, encoding: .utf8)
-                try renderer.render(template: template, data: context)
-                    .write(to: URL(fileURLWithPath: destinationPath), atomically: true, encoding: .utf8)
+                let rendered = try renderer.render(template: template, data: context)
+
+                let sourceURL: URL
+
+                if #available(macOS 13, *) {
+                    sourceURL = URL(filePath: source, directoryHint: .isDirectory)
+                } else {
+                    sourceURL = URL(fileURLWithPath: source, isDirectory: true)
+                }
+
+                let temporaryDirectory = try fileManager.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: sourceURL, create: true)
+
+                if #available(macOS 13, *) {
+                    sourceFilePath = temporaryDirectory.appending(component: file.name, directoryHint: .notDirectory).path(percentEncoded: false)
+                } else {
+                    sourceFilePath = temporaryDirectory.appendingPathComponent(file.name).path
+                }
+
+                fileManager.createFile(atPath: sourceFilePath, contents: Data(rendered.utf8))
             } else {
-                try FileManager.default.moveItem(
-                    atPath: source.appendingPathComponents(file.name),
-                    toPath: destinationPath)
+                sourceFilePath = source.appendingPathComponents(file.name)
             }
+
+            try fileManager.moveItem(
+                atPath: sourceFilePath,
+                toPath: destinationPath)
+
         case .folder(let files):
             let folder = file
-            try FileManager.default.createDirectory(atPath: destinationPath, withIntermediateDirectories: false)
+            let destinationURL: URL
+
+            if #available(macOS 13, *) {
+                destinationURL = URL(filePath: destinationPath, directoryHint: .checkFileSystem)
+            } else {
+                destinationURL = URL(fileURLWithPath: destinationPath)
+            }
+
+            try fileManager.createDirectory(at: destinationURL)
+
             for file in files {
                 try self.scaffold(
                     file: file,
                     from: source.appendingPathComponents(folder.name).trailingSlash,
                     to: destinationPath.trailingSlash,
-                    context: context
+                    context: context,
+                    fileManager: fileManager
                 )
             }
         }
