@@ -146,21 +146,9 @@ struct TemplateScaffolder {
                 let template = try String(contentsOf: source.appendingPathComponents(file.name).asFileURL, encoding: .utf8)
                 let rendered = try renderer.render(template: template, data: context)
 
-                let sourceURL: URL
+                let temporaryDirectory = try fileManager.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: URL(fileURLWithPath: source, isDirectory: true), create: true)
 
-                if #available(macOS 13, *) {
-                    sourceURL = URL(filePath: source, directoryHint: .isDirectory)
-                } else {
-                    sourceURL = URL(fileURLWithPath: source, isDirectory: true)
-                }
-
-                let temporaryDirectory = try fileManager.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: sourceURL, create: true)
-
-                if #available(macOS 13, *) {
-                    sourceFilePath = temporaryDirectory.appending(component: file.name, directoryHint: .notDirectory).path(percentEncoded: false)
-                } else {
-                    sourceFilePath = temporaryDirectory.appendingPathComponent(file.name).path
-                }
+                sourceFilePath = temporaryDirectory.appendingPathComponent(file.name).path
 
                 fileManager.createFile(atPath: sourceFilePath, contents: Data(rendered.utf8))
             } else {
@@ -173,15 +161,8 @@ struct TemplateScaffolder {
 
         case .folder(let files):
             let folder = file
-            let destinationURL: URL
 
-            if #available(macOS 13, *) {
-                destinationURL = URL(filePath: destinationPath, directoryHint: .checkFileSystem)
-            } else {
-                destinationURL = URL(fileURLWithPath: destinationPath)
-            }
-
-            try fileManager.createDirectory(at: destinationURL)
+            try fileManager.createDirectory(at: URL(fileURLWithPath: destinationPath))
 
             for file in files {
                 try self.scaffold(

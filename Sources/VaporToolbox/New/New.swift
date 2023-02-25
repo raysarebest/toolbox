@@ -75,16 +75,8 @@ struct New: AnyCommand {
             )
             try fileManager.removeItem(atPath: templateTree)
         } else {
-            let template: URL
-            let output: URL
-
-            if #available(macOS 13, *) {
-                template = URL(filePath: templateTree, directoryHint: .isDirectory)
-                output = URL(filePath: workTree, directoryHint: .isDirectory)
-            } else {
-                template = URL(fileURLWithPath: templateTree, isDirectory: true)
-                output = URL(fileURLWithPath: workTree, isDirectory: true)
-            }
+            let template = URL(fileURLWithPath: templateTree, isDirectory: true)
+            let output = URL(fileURLWithPath: workTree, isDirectory: true)
 
             try fileManager.moveDirectory(at: template, to: output)
         }
@@ -150,7 +142,7 @@ struct New: AnyCommand {
 
             guard !source.isDirectory else {
 
-                // By default, the system only asks if a directory should be move and none of its children, so we have to move them ourselves if we want those hooks
+                // By default, the system only asks if a directory should be moved and none of its children, so we have to move them ourselves if we want those hooks
 
                 do {
                     try manager.moveDirectory(at: source, to: destination)
@@ -162,17 +154,9 @@ struct New: AnyCommand {
                 return false
             }
 
-            let destinationPath: String
-
-            if #available(macOS 13, *) {
-                destinationPath = destination.path(percentEncoded: false)
-            } else {
-                destinationPath = destination.path
-            }
-
             switch conflictStrategy {
             case .keepExisting:
-                return !manager.fileExists(atPath: destinationPath)
+                return !manager.fileExists(atPath: destination.path)
             case .overwrite, .error: // Errors are handled in the error handler
                 return true
             }
@@ -335,15 +319,7 @@ extension FileManager {
         try createDirectory(at: destination)
 
         for itemSource in sourceContents {
-            let itemDestination: URL
-
-            if #available(macOS 13, *) {
-                itemDestination = destination.appending(component: source.lastPathComponent, directoryHint: .checkFileSystem)
-            } else {
-                itemDestination = destination.appendingPathComponent(source.lastPathComponent)
-            }
-
-            try moveItem(at: itemSource, to: itemDestination)
+            try moveItem(at: itemSource, to: destination.appendingPathComponent(source.lastPathComponent))
         }
     }
 }
